@@ -279,8 +279,8 @@ router.post("/reset-password", async (req, res) => {
 
 // Logout route
 router.post("/logout", (req, res) => {
-	res.clearCookie("token");
-	return res.json({ success: true, message: "Logged out successfully" });
-});
+    res.clearCookie("token", { path: '/' });
+    return res.json({ success: true, message: "Logged out successfully" });
+});;
 
 module.exports = router;

@@ -41,4 +41,19 @@ router.get("/:role", auth, async (req, res) => {
 	}
 });
 
+// POST delete user by UUID
+router.delete("/delete/:id", auth, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const { error } = await supabase.from("users").delete().eq("id", id);
+
+		if (error) throw error;
+
+		res.json({ message: "User deleted successfully" });
+	} catch (error) {
+		console.error("Error deleting user:", error);
+		res.status(500).json({ message: "Error deleting user" });
+	}
+});
+
 module.exports = router;
