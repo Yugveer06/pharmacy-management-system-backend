@@ -7,6 +7,8 @@ require("dotenv").config();
 
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
+const drugRoutes = require("./routes/drugs");
+const orderRoutes = require("./routes/orders");
 const { auth } = require("./middleware/auth");
 
 const app = express();
@@ -38,6 +40,8 @@ app.use(
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/drugs", drugRoutes);
+app.use("/api/orders", orderRoutes);
 
 // Replace the simple middleware with a proper handler
 app.get("/api/auth/check", auth, (req, res) => {

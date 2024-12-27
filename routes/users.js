@@ -41,18 +41,22 @@ router.get("/:role", auth, async (req, res) => {
 	}
 });
 
-// POST delete user by UUID
-router.delete("/delete/:id", auth, async (req, res) => {
+// GET user by ID
+router.get("/id/:id", auth, async (req, res) => {
 	try {
 		const { id } = req.params;
-		const { error } = await supabase.from("users").delete().eq("id", id);
+		const { data: user, error } = await supabase.from("users").select("*").eq("id", id).single();
 
 		if (error) throw error;
+		if (!user) return res.status(404).json({ message: "User not found" });
 
-		res.json({ message: "User deleted successfully" });
+		// Remove password from user object
+		const { password, ...sanitizedUser } = user;
+
+		res.json(sanitizedUser);
 	} catch (error) {
-		console.error("Error deleting user:", error);
-		res.status(500).json({ message: "Error deleting user" });
+		console.error("Error fetching user:", error);
+		res.status(500).json({ message: "Error fetching user" });
 	}
 });
 

@@ -205,6 +205,81 @@ router.put("/update-user/:userId", auth, checkRole(1), upload.single("avatar"), 
 	}
 });
 
+// Edit user profile route
+router.put("/edit-profile", auth, upload.single("avatar"), async (req, res) => {
+	try {
+		const userId = req.user.id;
+		const { f_name, l_name, email, phone, oldPassword, password } = req.body;
+
+		// Get current user data
+		const { data: currentUser, error: fetchError } = await supabase.from("users").select("*").eq("id", userId).single();
+
+		if (fetchError || !currentUser) {
+			return res.status(404).json({ message: "User not found" });
+		}
+
+		// If changing password, verify old password
+		if (password) {
+			if (!oldPassword) {
+				return res.status(400).json({ message: "Old password is required to change password" });
+			}
+
+			const isMatch = await bcrypt.compare(oldPassword, currentUser.password);
+			if (!isMatch) {
+				return res.status(401).json({ message: "Current password is incorrect" });
+			}
+		}
+
+		// Handle avatar upload
+		let avatarUrl = currentUser.avatar;
+		if (req.file) {
+			// Delete old avatar if exists
+			if (currentUser.avatar) {
+				await deleteAvatar(currentUser.avatar);
+			}
+			// Upload new avatar
+			avatarUrl = await uploadAvatar(req.file, userId);
+		}
+
+		// Prepare update object
+		const updateData = {
+			f_name,
+			l_name,
+			email,
+			phone,
+			avatar: avatarUrl,
+		};
+
+		// If changing password, hash new password
+		if (password) {
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(password, salt);
+			updateData.password = hashedPassword;
+		}
+
+		// Update user in database
+		const { data: updatedUser, error: updateError } = await supabase
+			.from("users")
+			.update(updateData)
+			.eq("id", userId)
+			.select()
+			.single();
+
+		if (updateError) {
+			return res.status(400).json({ message: updateError.message });
+		}
+
+		res.json({
+			success: true,
+			message: "Profile updated successfully",
+			user: updatedUser,
+		});
+	} catch (error) {
+		console.error("Edit profile error:", error);
+		res.status(500).json({ message: "Server error" });
+	}
+});
+
 // Forgot password route
 router.post("/forgot-password", async (req, res) => {
 	try {
@@ -279,8 +354,62 @@ router.post("/reset-password", async (req, res) => {
 
 // Logout route
 router.post("/logout", (req, res) => {
-    res.clearCookie("token", { path: '/' });
-    return res.json({ success: true, message: "Logged out successfully" });
-});;
+	res.clearCookie("token", { path: "/" });
+	return res.json({ success: true, message: "Logged out successfully" });
+});
+
+// Delete user route
+router.delete("/delete-user/:userId", auth, async (req, res) => {
+	try {
+		const { userId } = req.params;
+		const { password } = req.body;
+		const requestingUserId = req.user.id;
+		const requestingUserRole = req.user.role;
+
+		// Check if user exists
+		const { data: userToDelete, error: fetchError } = await supabase.from("users").select("*").eq("id", userId).single();
+
+		if (fetchError || !userToDelete) {
+			return res.status(404).json({ message: "User not found" });
+		}
+
+		// If not admin, user can only delete their own account and must provide password
+		if (requestingUserRole !== 1) {
+			if (requestingUserId !== userId) {
+				return res.status(403).json({ message: "You can only delete your own account" });
+			}
+
+			if (!password) {
+				return res.status(400).json({ message: "Password is required to delete your account" });
+			}
+
+			// Verify password
+			const isMatch = await bcrypt.compare(password, userToDelete.password);
+			if (!isMatch) {
+				return res.status(401).json({ message: "Invalid password" });
+			}
+		}
+
+		// Delete avatar if it exists
+		if (userToDelete.avatar) {
+			await deleteAvatar(userToDelete.avatar);
+		}
+
+		// Delete user from database
+		const { error: deleteError } = await supabase.from("users").delete().eq("id", userId);
+
+		if (deleteError) {
+			return res.status(400).json({ message: deleteError.message });
+		}
+
+		res.json({
+			success: true,
+			message: "User deleted successfully",
+		});
+	} catch (error) {
+		console.error("Delete user error:", error);
+		res.status(500).json({ message: "Server error" });
+	}
+});
 
 module.exports = router;
