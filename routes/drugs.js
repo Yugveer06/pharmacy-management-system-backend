@@ -80,7 +80,12 @@ router.delete("/:id", async (req, res) => {
 		const { error } = await supabase.from("drugs").delete().eq("id", id);
 
 		if (error) throw error;
-		res.json({ message: "Drug deleted successfully" });
+
+		// Fetch all remaining drugs after deletion
+		const { data: remainingDrugs, error: fetchError } = await supabase.from("drugs").select("*");
+
+		if (fetchError) throw fetchError;
+		res.json({ message: "Drug deleted successfully", drugs: remainingDrugs });
 	} catch (err) {
 		res.status(500).json({ error: err.message });
 	}

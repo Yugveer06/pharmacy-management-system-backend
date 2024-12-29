@@ -47,7 +47,12 @@ router.get("/id/:id", auth, async (req, res) => {
 		const { id } = req.params;
 		const { data: user, error } = await supabase.from("users").select("*").eq("id", id).single();
 
-		if (error) throw error;
+		if (error) {
+			if (error.code === "22P02") {
+				return res.status(400).json({ message: "Invalid ID format" });
+			}
+			throw error;
+		}
 		if (!user) return res.status(404).json({ message: "User not found" });
 
 		// Remove password from user object

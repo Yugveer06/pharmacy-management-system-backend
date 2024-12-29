@@ -62,12 +62,12 @@ router.post("/login", async (req, res) => {
 		console.log("JWT token generated for user:", { userId: user.id });
 
 		res.cookie("token", token, {
-			secure: process.env.NODE_ENV === "production", // Use secure cookies in production
-			sameSite: "strict",
+			httpOnly: true, // Prevents access via JavaScript
+			secure: process.env.NODE_ENV === "production", // Only send over HTTPS in production
+			sameSite: "strict", // Prevents CSRF
 		});
 		return res.json({
 			success: true,
-			token,
 			user: {
 				id: user.id,
 				email: user.email,
@@ -258,12 +258,7 @@ router.put("/edit-profile", auth, upload.single("avatar"), async (req, res) => {
 		}
 
 		// Update user in database
-		const { data: updatedUser, error: updateError } = await supabase
-			.from("users")
-			.update(updateData)
-			.eq("id", userId)
-			.select()
-			.single();
+		const { data: updatedUser, error: updateError } = await supabase.from("users").update(updateData).eq("id", userId).select().single();
 
 		if (updateError) {
 			return res.status(400).json({ message: updateError.message });
@@ -363,8 +358,22 @@ router.delete("/delete-user/:userId", auth, async (req, res) => {
 	try {
 		const { userId } = req.params;
 		const { password } = req.body;
+
+		// Get user info from auth token
 		const requestingUserId = req.user.id;
-		const requestingUserRole = req.user.role;
+		const requestingUserRole = req.user.role; // This comes from the JWT token via auth middleware
+
+		// Verify requesting user still exists and get their current role
+		const { data: requestingUser, error: authError } = await supabase.from("users").select("role_id").eq("id", requestingUserId).single();
+
+		if (authError || !requestingUser) {
+			return res.status(401).json({
+				message: "Authentication failed",
+			});
+		}
+
+		// Use the current role from database for verification
+		const currentRole = requestingUser.role_id;
 
 		// Check if user exists
 		const { data: userToDelete, error: fetchError } = await supabase.from("users").select("*").eq("id", userId).single();
@@ -373,20 +382,38 @@ router.delete("/delete-user/:userId", auth, async (req, res) => {
 			return res.status(404).json({ message: "User not found" });
 		}
 
-		// If not admin, user can only delete their own account and must provide password
-		if (requestingUserRole !== 1) {
+		// Prevent deletion of the last admin account
+		if (userToDelete.role_id === 1) {
+			const { data: adminCount } = await supabase.from("users").select("id", { count: "exact" }).eq("role_id", 1);
+
+			if (adminCount.length <= 1) {
+				return res.status(403).json({
+					message: "Cannot delete the last admin account",
+				});
+			}
+		}
+
+		// Only admins can delete other users
+		if (currentRole !== 1) {
 			if (requestingUserId !== userId) {
-				return res.status(403).json({ message: "You can only delete your own account" });
+				return res.status(403).json({
+					message: "Unauthorized: You can only delete your own account",
+				});
 			}
 
+			// Non-admin users must provide password for self-deletion
 			if (!password) {
-				return res.status(400).json({ message: "Password is required to delete your account" });
+				return res.status(400).json({
+					message: "Password is required to delete your account",
+				});
 			}
 
 			// Verify password
 			const isMatch = await bcrypt.compare(password, userToDelete.password);
 			if (!isMatch) {
-				return res.status(401).json({ message: "Invalid password" });
+				return res.status(401).json({
+					message: "Invalid password",
+				});
 			}
 		}
 
@@ -399,7 +426,7 @@ router.delete("/delete-user/:userId", auth, async (req, res) => {
 		const { error: deleteError } = await supabase.from("users").delete().eq("id", userId);
 
 		if (deleteError) {
-			return res.status(400).json({ message: deleteError.message });
+			throw new Error(deleteError.message);
 		}
 
 		res.json({
@@ -408,7 +435,9 @@ router.delete("/delete-user/:userId", auth, async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Delete user error:", error);
-		res.status(500).json({ message: "Server error" });
+		res.status(500).json({
+			message: error.message || "Server error during user deletion",
+		});
 	}
 });
 
