@@ -90,7 +90,7 @@ const roles = [
 ];
 
 // Create new user with avatar upload
-router.post("/create-user", auth, checkRole(1), upload.single("avatar"), async (req, res) => {
+router.post("/create-user", auth, upload.single("avatar"), async (req, res) => {
 	try {
 		const { email, password, f_name, l_name, phone, role_id } = req.body;
 
@@ -158,21 +158,28 @@ router.post("/create-user", auth, checkRole(1), upload.single("avatar"), async (
 });
 
 // Update user with avatar
-router.put("/update-user/:userId", auth, checkRole(1), upload.single("avatar"), async (req, res) => {
+router.put("/update-user/:userId", auth, upload.single("avatar"), async (req, res) => {
 	try {
 		const { userId } = req.params;
 		const { f_name, l_name, phone, role_id } = req.body;
 
-		// Get current user data for avatar deletion
-		const { data: currentUser } = await supabase.from("users").select("avatar").eq("id", userId).single();
+		// Get current user data for avatar deletion and role check
+		const { data: targetUser } = await supabase.from("users").select("*").eq("id", userId).single();
 
-		let avatarUrl = currentUser?.avatar;
+		// Check if authenticated user has permission to update this user
+		if (req.user.role > targetUser.role_id) {
+			return res.status(403).json({
+				message: "You don't have permission to update users with higher roles",
+			});
+		}
+
+		let avatarUrl = targetUser?.avatar;
 
 		// Upload new avatar if provided
 		if (req.file) {
 			// Delete old avatar if exists
-			if (currentUser?.avatar) {
-				await deleteAvatar(currentUser.avatar);
+			if (targetUser?.avatar) {
+				await deleteAvatar(targetUser.avatar);
 			}
 
 			// Upload new avatar
@@ -354,14 +361,13 @@ router.post("/logout", (req, res) => {
 });
 
 // Delete user route
-router.delete("/delete-user/:userId", auth, async (req, res) => {
+router.delete("/delete-own/:userId", auth, async (req, res) => {
 	try {
 		const { userId } = req.params;
 		const { password } = req.body;
 
 		// Get user info from auth token
 		const requestingUserId = req.user.id;
-		const requestingUserRole = req.user.role; // This comes from the JWT token via auth middleware
 
 		// Verify requesting user still exists and get their current role
 		const { data: requestingUser, error: authError } = await supabase.from("users").select("role_id").eq("id", requestingUserId).single();
@@ -413,6 +419,63 @@ router.delete("/delete-user/:userId", auth, async (req, res) => {
 			if (!isMatch) {
 				return res.status(401).json({
 					message: "Invalid password",
+				});
+			}
+		}
+
+		// Delete avatar if it exists
+		if (userToDelete.avatar) {
+			await deleteAvatar(userToDelete.avatar);
+		}
+
+		// Delete user from database
+		const { error: deleteError } = await supabase.from("users").delete().eq("id", userId);
+
+		if (deleteError) {
+			throw new Error(deleteError.message);
+		}
+
+		res.json({
+			success: true,
+			message: "User deleted successfully",
+		});
+	} catch (error) {
+		console.error("Delete user error:", error);
+		res.status(500).json({
+			message: error.message || "Server error during user deletion",
+		});
+	}
+});
+
+// Delete user route with role-based permissions
+router.delete("/delete-user/:userId", auth, async (req, res) => {
+	try {
+		const { userId } = req.params;
+
+		// Get requesting user's role from auth token
+		const requestingUserRole = req.user.role;
+
+		// Get target user details
+		const { data: userToDelete, error: fetchError } = await supabase.from("users").select("*").eq("id", userId).single();
+
+		if (fetchError || !userToDelete) {
+			return res.status(404).json({ message: "User not found" });
+		}
+
+		// Check if requesting user has permission to delete the target user
+		if (requestingUserRole >= userToDelete.role_id) {
+			return res.status(403).json({
+				message: "You can only delete users with lower role levels than yours",
+			});
+		}
+
+		// Prevent deletion of the last admin
+		if (userToDelete.role_id === 1) {
+			const { data: adminCount } = await supabase.from("users").select("id", { count: "exact" }).eq("role_id", 1);
+
+			if (adminCount.length <= 1) {
+				return res.status(403).json({
+					message: "Cannot delete the last admin account",
 				});
 			}
 		}
