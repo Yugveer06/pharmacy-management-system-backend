@@ -20,7 +20,7 @@ A modern web-based pharmacy management system built with cutting-edge technologi
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/pharmacy-management-system-frontend.git
+git clone https://github.com/yourusername/pharmacy-management-system-backend.git
 cd pharmacy-management-system
 ```
 
