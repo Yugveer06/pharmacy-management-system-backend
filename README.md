@@ -53,9 +53,8 @@ The application will be available at `http://localhost:5000`
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
 ## Screenshots
-![image](https://github.com/user-attachments/assets/52f89f11-1ece-4ba9-a31b-59f1ae43c202)
-![image](https://github.com/user-attachments/assets/875f52a7-03b7-42cc-9e90-0ab58b27e546)
-![image](https://github.com/user-attachments/assets/02047f9c-03af-4e92-a250-d3550355b429)
+![image](https://github.com/user-attachments/assets/bc079bba-2b62-445c-8ec1-178fd373e77e)
+
 
 
 
