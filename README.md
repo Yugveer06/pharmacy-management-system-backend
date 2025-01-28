@@ -52,11 +52,6 @@ The application will be available at `http://localhost:5000`
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-## Screenshots
-![image](https://github.com/user-attachments/assets/bc079bba-2b62-445c-8ec1-178fd373e77e)
-
-
-
 
 ## License
 
